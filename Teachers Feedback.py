@@ -4,30 +4,38 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
+# Load credentials securely from Streamlit Cloud Secrets (stored under [mysql])
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",          
-    "password": "12345",  
-    "database": "feedback_portal"
+    "host": st.secrets["mysql"]["host"],
+    "user": st.secrets["mysql"]["user"],
+    "password": st.secrets["mysql"]["password"],
+    "database": st.secrets["mysql"]["database"],
+    "port": int(st.secrets["mysql"]["port"])
 }
 
 def get_db_connection():
-    """Establishes a connection to the specific database."""
+    """Establishes a connection to the specific database on Aiven."""
     return mysql.connector.connect(**DB_CONFIG)
+
 def init_db():
     """Initializes the database, tables, and seeds initial data if empty."""
     try:
+        # Step 1: Connect without database name to ensure the database exists
         conn = mysql.connector.connect(
             host=DB_CONFIG["host"],
             user=DB_CONFIG["user"],
-            password=DB_CONFIG["password"]
+            password=DB_CONFIG["password"],
+            port=DB_CONFIG["port"]
         )
         cursor = conn.cursor()
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
         cursor.close()
         conn.close()
+
+        # Step 2: Connect to the specific database and create tables
         conn = get_db_connection()
         cursor = conn.cursor()
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username VARCHAR(50) PRIMARY KEY,
@@ -36,6 +44,7 @@ def init_db():
                 name VARCHAR(100) NOT NULL
             )
         """)
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,6 +56,8 @@ def init_db():
                 review TEXT
             )
         """)
+        
+        # Seed default users if table is empty
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             default_users = [
@@ -56,7 +67,7 @@ def init_db():
                 ("T103", "teach123", "Teacher", "Dr. P.Anu"),
                 ("T104", "teach123", "Teacher", "Prof. S.Senthil"),
                 ("T105", "teach123", "Teacher", "Dr. K.Priya"),
-                ("T106", "teach123", "Teacher", "Dr.  S.Maheshwari")
+                ("T106", "teach123", "Teacher", "Dr. S.Maheshwari")
             ]
             cursor.executemany(
                 "INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)", 
@@ -64,6 +75,7 @@ def init_db():
             )
             conn.commit()
 
+        # Seed default feedback if table is empty
         cursor.execute("SELECT COUNT(*) FROM feedback")
         if cursor.fetchone()[0] == 0:
             default_feedback = [
@@ -260,7 +272,7 @@ else:
             with tab_students:
                 st.dataframe(users_df[users_df["Role"] == "Student"][["User ID", "Name"]], use_container_width=True, height=200, hide_index=True)
             with tab_teachers:
-                st.dataframe(users_df[users_df["Role"] == "Teacher"][["User ID", "Name"]], use_container_width=True, height=200, hide_index=True)
+                st.dataframe(users_df[users_df["Role"] == "Teacher"][["User ID", "Name"]], use_container_width=True, hide_index=True)
 
             st.markdown("---")
             st.subheader("🗑️ Danger Zone: Remove User Record")
@@ -383,7 +395,7 @@ else:
 
     elif user_info["role"] == "Teacher":
         teacher_id = user_info["username"]
-        st.header(f"📊 Feedback Performance Insights")
+        st.header("📊 Feedback Performance Insights")
         
         try:
             conn = get_db_connection()
@@ -439,5 +451,5 @@ else:
             st.subheader("💡 What Students Say (For Your Improvement)")
             for idx, row in df_teacher.iterrows():
                 with st.expander(f"Review by {row['student_name']} — Combined Rating: {row['performance']} | {'⭐' * int(row['stars'])}"):
-                    st.write(f"**Detailed Ratings & Paragraph Review:**")
+                    st.write("**Detailed Ratings & Paragraph Review:**")
                     st.info(row['review'] if row['review'].strip() else "No specific parameter comments provided.")
