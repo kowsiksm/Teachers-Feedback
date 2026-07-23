@@ -4,21 +4,30 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
+# ------------------------------------------------------------------------------
+# 1. DATABASE CONFIGURATION
+# ------------------------------------------------------------------------------
+# Note: Using '127.0.0.1' instead of 'localhost' forces a TCP connection,
+# avoiding socket file errors on Linux, macOS, and XAMPP/WAMP setups.
 DB_CONFIG = {
-    "host": "localhost",
-    "user": "root",          
-    "password": "12345",  
+    "host": "127.0.0.1",
+    "port": 3306,
+    "user": "root",
+    "password": "12345",
     "database": "feedback_portal"
 }
 
 def get_db_connection():
-    """Establishes a connection to the specific database."""
+    """Establishes a direct connection to the specific database."""
     return mysql.connector.connect(**DB_CONFIG)
+
 def init_db():
-    """Initializes the database, tables, and seeds initial data if empty."""
+    """Initializes the database, creates tables, and populates default data."""
     try:
+        # Step A: Connect to server without database to ensure DB creation
         conn = mysql.connector.connect(
             host=DB_CONFIG["host"],
+            port=DB_CONFIG["port"],
             user=DB_CONFIG["user"],
             password=DB_CONFIG["password"]
         )
@@ -26,8 +35,12 @@ def init_db():
         cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
         cursor.close()
         conn.close()
+
+        # Step B: Connect to the specific database to create tables
         conn = get_db_connection()
         cursor = conn.cursor()
+
+        # Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username VARCHAR(50) PRIMARY KEY,
@@ -36,6 +49,8 @@ def init_db():
                 name VARCHAR(100) NOT NULL
             )
         """)
+
+        # Feedback table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,6 +62,8 @@ def init_db():
                 review TEXT
             )
         """)
+
+        # Step C: Seed default users if empty
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             default_users = [
@@ -56,14 +73,15 @@ def init_db():
                 ("T103", "teach123", "Teacher", "Dr. P.Anu"),
                 ("T104", "teach123", "Teacher", "Prof. S.Senthil"),
                 ("T105", "teach123", "Teacher", "Dr. K.Priya"),
-                ("T106", "teach123", "Teacher", "Dr.  S.Maheshwari")
+                ("T106", "teach123", "Teacher", "Dr. S.Maheshwari")
             ]
             cursor.executemany(
-                "INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)", 
+                "INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)",
                 default_users
             )
             conn.commit()
 
+        # Step D: Seed default feedback if empty
         cursor.execute("SELECT COUNT(*) FROM feedback")
         if cursor.fetchone()[0] == 0:
             default_feedback = [
@@ -80,10 +98,11 @@ def init_db():
 
         cursor.close()
         conn.close()
-    except Error as e:
-        st.error(f"Error during Database Initialization: {e}")
 
-init_db()
+    except Error as e:
+        st.error(f"❌ **Database Connection Error:** {e}")
+        st.info("💡 **Troubleshooting Check:** Ensure MySQL service is running on your machine (Port 3306).")
+        st.stop()  # Stop Streamlit execution cleanly so app doesn't crash downstream
 
 def get_top_teacher():
     """Queries database directly to determine the top-rated teacher."""
@@ -105,16 +124,28 @@ def get_top_teacher():
     except Exception:
         return "N/A", "N/A", 0.0
 
+# ------------------------------------------------------------------------------
+# 2. PAGE LAYOUT & INITIALIZATION
+# ------------------------------------------------------------------------------
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
+
+# Initialize database tables & default data
+init_db()
+
 st.title("🎓 Teacher Performance Feedback Portal")
 
+# Top Banner Highlight
 top_name, top_id, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
 
+# Session state setup for authentication
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
+# ------------------------------------------------------------------------------
+# 3. LOGIN GATEWAY (UNAUTHENTICATED USER)
+# ------------------------------------------------------------------------------
 if st.session_state.logged_in_user is None:
     st.subheader("🔑 Portal Gateways")
     col_login1, col_login2 = st.columns(2)
@@ -150,6 +181,10 @@ if st.session_state.logged_in_user is None:
                 st.error("Invalid Credentials. Please check ID and Password.")
         except Error as e:
             st.error(f"Database error during login: {e}")
+
+# ------------------------------------------------------------------------------
+# 4. DASHBOARDS (AUTHENTICATED USERS)
+# ------------------------------------------------------------------------------
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**")
@@ -158,6 +193,9 @@ else:
         st.session_state.logged_in_user = None
         st.rerun()
 
+    # --------------------------------------------------------------------------
+    # 4A. ADMIN DASHBOARD
+    # --------------------------------------------------------------------------
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
         
@@ -205,10 +243,22 @@ else:
             col_exp1, col_exp2 = st.columns(2)
             with col_exp1:
                 csv_raw_feedback = df_all.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Download Master Feedback Log (CSV)", data=csv_raw_feedback, file_name="master_feedback_log.csv", mime="text/csv", use_container_width=True)
+                st.download_button(
+                    label="📥 Download Master Feedback Log (CSV)", 
+                    data=csv_raw_feedback, 
+                    file_name="master_feedback_log.csv", 
+                    mime="text/csv", 
+                    use_container_width=True
+                )
             with col_exp2:
                 csv_summary_metrics = ranking_metrics.drop(columns=["students"]).to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Download Aggregated Performance Report (CSV)", data=csv_summary_metrics, file_name="aggregated_teacher_performance.csv", mime="text/csv", use_container_width=True)
+                st.download_button(
+                    label="📥 Download Aggregated Performance Report (CSV)", 
+                    data=csv_summary_metrics, 
+                    file_name="aggregated_teacher_performance.csv", 
+                    mime="text/csv", 
+                    use_container_width=True
+                )
             st.markdown("---")
             
         col1, col2 = st.columns([1, 1])
@@ -289,6 +339,9 @@ else:
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
 
+    # --------------------------------------------------------------------------
+    # 4B. STUDENT DASHBOARD
+    # --------------------------------------------------------------------------
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
         
@@ -307,7 +360,11 @@ else:
             st.warning("No teachers registered in the system yet.")
         else:
             with st.form("feedback_form", clear_on_submit=True):
-                selected_teacher_id = st.selectbox("Select Teacher", list(teachers_list.keys()), format_func=lambda x: f"{teachers_list[x]} ({x})")
+                selected_teacher_id = st.selectbox(
+                    "Select Teacher", 
+                    list(teachers_list.keys()), 
+                    format_func=lambda x: f"{teachers_list[x]} ({x})"
+                )
                 
                 st.markdown("### 📊 Performance Assessment Matrix")
                 st.markdown("Please evaluate your instructor honestly across the following indicators:")
@@ -379,8 +436,16 @@ else:
                 st.dataframe(display_history, use_container_width=True, hide_index=True)
                 
                 csv_student = display_history.to_csv(index=False).encode('utf-8')
-                st.download_button(label="📥 Download My Submission History (CSV)", data=csv_student, file_name=f"my_submitted_feedback_{user_info['username']}.csv", mime="text/csv")
+                st.download_button(
+                    label="📥 Download My Submission History (CSV)", 
+                    data=csv_student, 
+                    file_name=f"my_submitted_feedback_{user_info['username']}.csv", 
+                    mime="text/csv"
+                )
 
+    # --------------------------------------------------------------------------
+    # 4C. TEACHER DASHBOARD
+    # --------------------------------------------------------------------------
     elif user_info["role"] == "Teacher":
         teacher_id = user_info["username"]
         st.header(f"📊 Feedback Performance Insights")
@@ -411,7 +476,14 @@ else:
                     Students=('student_name', lambda x: ", ".join(x))
                 ).reindex([1, 2, 3, 4, 5], fill_value=0).reset_index()
                 
-                fig_stars = px.bar(star_group, x='stars', y='Count', text='Count', labels={'Count': 'Number of Students', 'stars': 'Rating Level', 'Students': 'Voted By'}, hover_data={'Students': True})
+                fig_stars = px.bar(
+                    star_group, 
+                    x='stars', 
+                    y='Count', 
+                    text='Count', 
+                    labels={'Count': 'Number of Students', 'stars': 'Rating Level', 'Students': 'Voted By'}, 
+                    hover_data={'Students': True}
+                )
                 fig_stars.update_traces(textposition='outside')
                 fig_stars.update_layout(yaxis_range=[0, max(star_group['Count']) + 2], height=280)
                 st.plotly_chart(fig_stars, use_container_width=True)
@@ -423,7 +495,15 @@ else:
                     Students=('student_name', lambda x: ", ".join(x))
                 ).reset_index()
                 
-                fig_pie = px.pie(cat_group, values='Count', names='performance', color='performance', labels={'Students': 'Students Group', 'performance': 'Category'}, color_discrete_map={'Good': '#2ca02c', 'Moderate': '#ff7f0e', 'Low': '#d62728'}, hover_data={'Students': True})
+                fig_pie = px.pie(
+                    cat_group, 
+                    values='Count', 
+                    names='performance', 
+                    color='performance', 
+                    labels={'Students': 'Students Group', 'performance': 'Category'}, 
+                    color_discrete_map={'Good': '#2ca02c', 'Moderate': '#ff7f0e', 'Low': '#d62728'}, 
+                    hover_data={'Students': True}
+                )
                 fig_pie.update_traces(textinfo='label+percent+value')
                 fig_pie.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=280, showlegend=False)
                 st.plotly_chart(fig_pie, use_container_width=True)
@@ -433,7 +513,13 @@ else:
             export_df = df_teacher[["student_name", "performance", "stars", "review"]].copy()
             export_df.columns = ["Student Name", "Performance Class", "Stars Rating", "Detailed Report Metrics Log"]
             csv_teacher_data = export_df.to_csv(index=False).encode('utf-8')
-            st.download_button(label="📥 Download My Feedback Report (CSV)", data=csv_teacher_data, file_name=f"feedback_report_{teacher_id}.csv", mime="text/csv", use_container_width=True)
+            st.download_button(
+                label="📥 Download My Feedback Report (CSV)", 
+                data=csv_teacher_data, 
+                file_name=f"feedback_report_{teacher_id}.csv", 
+                mime="text/csv", 
+                use_container_width=True
+            )
             
             st.markdown("---")
             st.subheader("💡 What Students Say (For Your Improvement)")
