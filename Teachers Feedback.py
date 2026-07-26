@@ -4,6 +4,7 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
+# Load credentials securely from Streamlit Cloud Secrets (stored under [mysql])
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
@@ -19,6 +20,7 @@ def get_db_connection():
 def init_db():
     """Initializes the database, tables, and seeds initial data if empty."""
     try:
+        # Step 1: Connect without database name to ensure the database exists
         conn = mysql.connector.connect(
             host=DB_CONFIG["host"],
             user=DB_CONFIG["user"],
@@ -30,6 +32,7 @@ def init_db():
         cursor.close()
         conn.close()
 
+        # Step 2: Connect to the specific database and create tables
         conn = get_db_connection()
         cursor = conn.cursor()
         
@@ -54,6 +57,7 @@ def init_db():
             )
         """)
         
+        # Seed default users if table is empty
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             default_users = [
@@ -70,6 +74,8 @@ def init_db():
                 default_users
             )
             conn.commit()
+
+        # Seed default feedback if table is empty
         cursor.execute("SELECT COUNT(*) FROM feedback")
         if cursor.fetchone()[0] == 0:
             default_feedback = [
@@ -103,9 +109,11 @@ def get_top_teacher():
         """
         df = pd.read_sql(query, conn)
         conn.close()
+        
         if df.empty:
             return "N/A", "N/A", 0.0
         
+        # Determine maximum average score dynamically
         max_rating = df["avg_stars"].max()
         top_teachers_df = df[df["avg_stars"] == max_rating]
         
@@ -119,9 +127,11 @@ def get_top_teacher():
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 st.title("🎓 Teacher Performance Feedback Portal")
 
+# Dynamic Header Display
 top_name, top_id, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
+
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
@@ -143,6 +153,7 @@ if st.session_state.logged_in_user is None:
         username = st.text_input("User ID / Username / Roll No")
     with col2:
         password = st.text_input("Password", type="password")
+        
     if st.button("Login securely to System", use_container_width=True):
         try:
             conn = get_db_connection()
@@ -151,6 +162,7 @@ if st.session_state.logged_in_user is None:
             user_record = cursor.fetchone()
             cursor.close()
             conn.close()
+            
             if user_record:
                 st.session_state.logged_in_user = user_record  
                 st.rerun()
@@ -165,6 +177,7 @@ else:
     if st.sidebar.button("Logout", use_container_width=True):
         st.session_state.logged_in_user = None
         st.rerun()
+
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
         
@@ -249,7 +262,8 @@ else:
                             cursor.close()
                             conn.close()
                         except Error as e:
-                            st.error(f"Failed to create user: {e}")            
+                            st.error(f"Failed to create user: {e}")
+                        
         with col2:
             st.subheader("📋 Dynamic System Users Directory")
             try:
@@ -294,8 +308,10 @@ else:
                         conn.close()
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
+
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
+        
         try:
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
@@ -306,6 +322,7 @@ else:
         except Error as e:
             teachers_list = {}
             st.error(f"Failed to fetch faculty list: {e}")
+        
         if not teachers_list:
             st.warning("No teachers registered in the system yet.")
         else:
@@ -327,10 +344,13 @@ else:
                 st.markdown("---")
                 st.write("Overall Score Star Selection (Optional override link):")
                 star_input = st.feedback("stars")
+                
                 review_text = st.text_area("Paragraph Review / Detailed Comments", placeholder="Provide constructive feedback here regarding lessons...")
+                
                 submit_feedback = st.form_submit_button("Submit Structured Feedback")
                 if submit_feedback:
                     calculated_avg = (m_lecturing + m_discipline + m_portion + m_impression + m_communication) / 5
+                    
                     if calculated_avg >= 4.0:
                         performance_classification = "Good"
                     elif calculated_avg >= 2.5:
@@ -358,6 +378,7 @@ else:
             
             st.markdown("---")
             st.subheader("📊 Your Feedback History")
+            
             try:
                 conn = get_db_connection()
                 df_student_history = pd.read_sql(
@@ -369,6 +390,7 @@ else:
             except Exception as e:
                 df_student_history = pd.DataFrame()
                 st.error(f"Could not load your history: {e}")
+            
             if df_student_history.empty:
                 st.info("You haven't submitted any feedback forms yet.")
             else:
@@ -432,6 +454,7 @@ else:
             export_df.columns = ["Student Name", "Performance Class", "Stars Rating", "Detailed Report Metrics Log"]
             csv_teacher_data = export_df.to_csv(index=False).encode('utf-8')
             st.download_button(label="📥 Download My Feedback Report (CSV)", data=csv_teacher_data, file_name=f"feedback_report_{teacher_id}.csv", mime="text/csv", use_container_width=True)
+            
             st.markdown("---")
             st.subheader("💡 What Students Say (For Your Improvement)")
             for idx, row in df_teacher.iterrows():
