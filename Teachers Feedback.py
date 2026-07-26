@@ -4,18 +4,17 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
-# Load credentials securely from Streamlit Cloud Secrets
+# Load database settings securely from Secrets
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
     "password": st.secrets["mysql"]["password"],
     "database": st.secrets["mysql"]["database"],
     "port": int(st.secrets["mysql"]["port"]),
-    "ssl_disabled": False  # Fixed: Correct argument for mysql-connector-python with Aiven SSL
+    "ssl_disabled": False  # Connects securely using Aiven SSL
 }
 
 def get_db_connection():
-    """Establishes a connection to the specific database on Aiven."""
     return mysql.connector.connect(**DB_CONFIG)
 
 def init_db():
