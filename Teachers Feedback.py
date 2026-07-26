@@ -11,7 +11,7 @@ DB_CONFIG = {
     "password": st.secrets["mysql"]["password"],
     "database": st.secrets["mysql"]["database"],
     "port": int(st.secrets["mysql"]["port"]),
-    "ssl_mode": "REQUIRED"  # Crucial for Aiven MySQL connection
+    "ssl_disabled": False  # Fixed: Correct argument for mysql-connector-python with Aiven SSL
 }
 
 def get_db_connection():
