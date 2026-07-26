@@ -4,26 +4,38 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
-# Load database settings securely from Secrets
+# Load credentials securely from Streamlit Cloud Secrets (stored under [mysql])
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
     "password": st.secrets["mysql"]["password"],
     "database": st.secrets["mysql"]["database"],
-    "port": int(st.secrets["mysql"]["port"]),
-    "ssl_disabled": False  # Connects securely using Aiven SSL
+    "port": int(st.secrets["mysql"]["port"])
 }
 
 def get_db_connection():
+    """Establishes a connection to the specific database on Aiven."""
     return mysql.connector.connect(**DB_CONFIG)
 
 def init_db():
-    """Initializes tables and seeds initial data if empty."""
+    """Initializes the database, tables, and seeds initial data if empty."""
     try:
+        # Step 1: Connect without database name to ensure the database exists
+        conn = mysql.connector.connect(
+            host=DB_CONFIG["host"],
+            user=DB_CONFIG["user"],
+            password=DB_CONFIG["password"],
+            port=DB_CONFIG["port"]
+        )
+        cursor = conn.cursor()
+        cursor.execute(f"CREATE DATABASE IF NOT EXISTS {DB_CONFIG['database']}")
+        cursor.close()
+        conn.close()
+
+        # Step 2: Connect to the specific database and create tables
         conn = get_db_connection()
         cursor = conn.cursor()
-
-        # Users table
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username VARCHAR(50) PRIMARY KEY,
@@ -32,8 +44,7 @@ def init_db():
                 name VARCHAR(100) NOT NULL
             )
         """)
-
-        # Feedback table
+        
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -45,8 +56,8 @@ def init_db():
                 review TEXT
             )
         """)
-
-        # Seed default users if empty
+        
+        # Seed default users if table is empty
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             default_users = [
@@ -59,12 +70,12 @@ def init_db():
                 ("T106", "teach123", "Teacher", "Dr. S.Maheshwari")
             ]
             cursor.executemany(
-                "INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)",
+                "INSERT INTO users (username, password, role, name) VALUES (%s, %s, %s, %s)", 
                 default_users
             )
             conn.commit()
 
-        # Seed default feedback if empty
+        # Seed default feedback if table is empty
         cursor.execute("SELECT COUNT(*) FROM feedback")
         if cursor.fetchone()[0] == 0:
             default_feedback = [
@@ -84,40 +95,31 @@ def init_db():
     except Error as e:
         st.error(f"Error during Database Initialization: {e}")
 
-# Run database table setup
 init_db()
 
 def get_top_teacher():
-    """Queries database dynamically to calculate top-rated teacher(s)."""
+    """Queries database directly to determine the top-rated teacher."""
     try:
         conn = get_db_connection()
         query = """
             SELECT teacher_id, teacher_name, AVG(stars) as avg_stars 
             FROM feedback 
             GROUP BY teacher_id, teacher_name 
-            ORDER BY avg_stars DESC
+            ORDER BY avg_stars DESC 
+            LIMIT 1
         """
         df = pd.read_sql(query, conn)
         conn.close()
-
         if df.empty:
             return "N/A", "N/A", 0.0
-
-        max_rating = df["avg_stars"].max()
-        top_teachers_df = df[df["avg_stars"] == max_rating]
-
-        names = ", ".join(top_teachers_df["teacher_name"].tolist())
-        ids = ", ".join(top_teachers_df["teacher_id"].tolist())
-
-        return names, ids, round(max_rating, 2)
+        top_teacher = df.iloc[0]
+        return top_teacher["teacher_name"], top_teacher["teacher_id"], round(top_teacher["avg_stars"], 2)
     except Exception:
         return "N/A", "N/A", 0.0
 
-# Page Setup
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 st.title("🎓 Teacher Performance Feedback Portal")
 
-# Top Header Banner
 top_name, top_id, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
@@ -125,24 +127,25 @@ st.markdown("---")
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
-# --- LOGIN SCREEN ---
 if st.session_state.logged_in_user is None:
     st.subheader("🔑 Portal Gateways")
     col_login1, col_login2 = st.columns(2)
-
+    
     with col_login1:
-        st.info("### 📝 Student Login Dashboard\nStudents enter assigned Roll Number ID and password parameters here.")
+        st.info("### 📝 Student Login Dashboard")
+        st.markdown("Students enter assigned Roll Number ID and password parameters here.")
     with col_login2:
-        st.warning("### 🛠️ Admin / Teacher Login Desk\nAdministrative supervisors and academic faculty log in here.")
-
+        st.warning("### 🛠️ Admin / Teacher Login Desk")
+        st.markdown("Administrative supervisors and academic faculty log in here.")
+        
     st.markdown("<br>", unsafe_allow_html=True)
-
+    
     col1, col2 = st.columns(2)
     with col1:
         username = st.text_input("User ID / Username / Roll No")
     with col2:
         password = st.text_input("Password", type="password")
-
+        
     if st.button("Login securely to System", use_container_width=True):
         try:
             conn = get_db_connection()
@@ -151,16 +154,14 @@ if st.session_state.logged_in_user is None:
             user_record = cursor.fetchone()
             cursor.close()
             conn.close()
-
+            
             if user_record:
-                st.session_state.logged_in_user = user_record
+                st.session_state.logged_in_user = user_record  
                 st.rerun()
             else:
                 st.error("Invalid Credentials. Please check ID and Password.")
         except Error as e:
             st.error(f"Database error during login: {e}")
-
-# --- DASHBOARDS AFTER LOGIN ---
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**")
@@ -169,10 +170,9 @@ else:
         st.session_state.logged_in_user = None
         st.rerun()
 
-    # 1. ADMIN DASHBOARD
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
-
+        
         try:
             conn = get_db_connection()
             df_all = pd.read_sql("SELECT * FROM feedback", conn)
@@ -180,26 +180,26 @@ else:
         except Exception as e:
             df_all = pd.DataFrame()
             st.error(f"Failed to fetch feedback logs: {e}")
-
+        
         if not df_all.empty:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
-
+            
             ranking_metrics = df_all.groupby(["teacher_id", "teacher_name"]).agg(
                 avg_stars=("stars", "mean"),
                 total_reviews=("stars", "count"),
-                students=("student_name", lambda x: ", ".join(x.unique()))
+                students=("student_name", lambda x: ", ".join(x.unique())) 
             ).reset_index().sort_values(by="avg_stars", ascending=False)
-
+            
             ranking_metrics["Rank"] = range(1, len(ranking_metrics) + 1)
-
+            
             fig_ranking = px.bar(
                 ranking_metrics,
                 x="teacher_name",
                 y="avg_stars",
                 title="Official Teacher Performance Ranking (Higher is Better)",
                 labels={
-                    "avg_stars": "Average Rating Score",
-                    "teacher_name": "Faculty Member Name",
+                    "avg_stars": "Average Rating Score", 
+                    "teacher_name": "Faculty Member Name", 
                     "Rank": "Leaderboard Rank",
                     "total_reviews": "Total Students Voted",
                     "students": "Voted By"
@@ -207,34 +207,22 @@ else:
                 color="avg_stars",
                 color_continuous_scale="turbo",
                 text="avg_stars",
-                hover_data=["Rank", "total_reviews", "students"]
+                hover_data=["Rank", "total_reviews", "students"] 
             )
             fig_ranking.update_traces(texttemplate='%{text:.2f} ⭐', textposition='outside')
             fig_ranking.update_layout(yaxis_range=[0, 5.5], height=380)
             st.plotly_chart(fig_ranking, use_container_width=True)
-
+            
             st.subheader("📥 Export Institutional Insights Data")
             col_exp1, col_exp2 = st.columns(2)
             with col_exp1:
                 csv_raw_feedback = df_all.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Master Feedback Log (CSV)",
-                    data=csv_raw_feedback,
-                    file_name="master_feedback_log.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                st.download_button(label="📥 Download Master Feedback Log (CSV)", data=csv_raw_feedback, file_name="master_feedback_log.csv", mime="text/csv", use_container_width=True)
             with col_exp2:
                 csv_summary_metrics = ranking_metrics.drop(columns=["students"]).to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download Aggregated Performance Report (CSV)",
-                    data=csv_summary_metrics,
-                    file_name="aggregated_teacher_performance.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                st.download_button(label="📥 Download Aggregated Performance Report (CSV)", data=csv_summary_metrics, file_name="aggregated_teacher_performance.csv", mime="text/csv", use_container_width=True)
             st.markdown("---")
-
+            
         col1, col2 = st.columns([1, 1])
         with col1:
             with st.form("add_user_form", clear_on_submit=True):
@@ -243,7 +231,7 @@ else:
                 new_name = st.text_input("Full Name")
                 new_pass = st.text_input("Setup Temporary Password", type="password")
                 new_role = st.selectbox("Assign System Role", ["Student", "Teacher"])
-
+                
                 submit_user = st.form_submit_button("Save & Grant System Access")
                 if submit_user:
                     if not new_uid.strip() or not new_name.strip() or not new_pass.strip():
@@ -267,7 +255,7 @@ else:
                             conn.close()
                         except Error as e:
                             st.error(f"Failed to create user: {e}")
-
+                        
         with col2:
             st.subheader("📋 Dynamic System Users Directory")
             try:
@@ -277,7 +265,7 @@ else:
             except Exception as e:
                 users_df = pd.DataFrame(columns=["User ID", "Name", "Role"])
                 st.error(f"Failed to fetch user directory: {e}")
-
+            
             tab_all, tab_students, tab_teachers = st.tabs(["All Users", "Students Only", "Teachers Only"])
             with tab_all:
                 st.dataframe(users_df, use_container_width=True, height=200, hide_index=True)
@@ -300,7 +288,7 @@ else:
                         cursor = conn.cursor()
                         cursor.execute("SELECT name, role FROM users WHERE username = %s", (del_uid,))
                         target_user = cursor.fetchone()
-
+                        
                         if target_user:
                             cursor.execute("DELETE FROM users WHERE username = %s", (del_uid,))
                             conn.commit()
@@ -313,10 +301,9 @@ else:
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
 
-    # 2. STUDENT DASHBOARD
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
-
+        
         try:
             conn = get_db_connection()
             cursor = conn.cursor(dictionary=True)
@@ -327,16 +314,16 @@ else:
         except Error as e:
             teachers_list = {}
             st.error(f"Failed to fetch faculty list: {e}")
-
+        
         if not teachers_list:
             st.warning("No teachers registered in the system yet.")
         else:
             with st.form("feedback_form", clear_on_submit=True):
                 selected_teacher_id = st.selectbox("Select Teacher", list(teachers_list.keys()), format_func=lambda x: f"{teachers_list[x]} ({x})")
-
+                
                 st.markdown("### 📊 Performance Assessment Matrix")
                 st.markdown("Please evaluate your instructor honestly across the following indicators:")
-
+                
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
                     m_lecturing = st.selectbox("📖 Lecturing Quality & Explanation", [5, 4, 3, 2, 1], format_func=lambda x: f"{x} Stars")
@@ -345,27 +332,27 @@ else:
                 with col_m2:
                     m_impression = st.selectbox("🤝 General Impression Between Students", [5, 4, 3, 2, 1], format_func=lambda x: f"{x} Stars")
                     m_communication = st.selectbox("🗣️ Communication Skills & Approachability", [5, 4, 3, 2, 1], format_func=lambda x: f"{x} Stars")
-
+                
                 st.markdown("---")
                 st.write("Overall Score Star Selection (Optional override link):")
                 star_input = st.feedback("stars")
-
+                
                 review_text = st.text_area("Paragraph Review / Detailed Comments", placeholder="Provide constructive feedback here regarding lessons...")
-
+                
                 submit_feedback = st.form_submit_button("Submit Structured Feedback")
                 if submit_feedback:
                     calculated_avg = (m_lecturing + m_discipline + m_portion + m_impression + m_communication) / 5
-
+                    
                     if calculated_avg >= 4.0:
                         performance_classification = "Good"
                     elif calculated_avg >= 2.5:
                         performance_classification = "Moderate"
                     else:
                         performance_classification = "Low"
-
+                        
                     final_stars = (star_input + 1) if star_input is not None else round(calculated_avg)
                     detailed_review = f"[Lecturing: {m_lecturing}/5, Discipline: {m_discipline}/5, Portion: {m_portion}/5, Impression: {m_impression}/5, Communication: {m_communication}/5] {review_text}"
-
+                    
                     try:
                         conn = get_db_connection()
                         cursor = conn.cursor()
@@ -380,10 +367,10 @@ else:
                         st.rerun()
                     except Error as e:
                         st.error(f"Failed to submit feedback: {e}")
-
+            
             st.markdown("---")
             st.subheader("📊 Your Feedback History")
-
+            
             try:
                 conn = get_db_connection()
                 df_student_history = pd.read_sql(
@@ -395,27 +382,21 @@ else:
             except Exception as e:
                 df_student_history = pd.DataFrame()
                 st.error(f"Could not load your history: {e}")
-
+            
             if df_student_history.empty:
                 st.info("You haven't submitted any feedback forms yet.")
             else:
                 display_history = df_student_history.copy()
                 display_history.columns = ["Teacher ID", "Teacher Name", "Classification", "Stars Given", "Your Logged Review Metrics"]
                 st.dataframe(display_history, use_container_width=True, hide_index=True)
-
+                
                 csv_student = display_history.to_csv(index=False).encode('utf-8')
-                st.download_button(
-                    label="📥 Download My Submission History (CSV)",
-                    data=csv_student,
-                    file_name=f"my_submitted_feedback_{user_info['username']}.csv",
-                    mime="text/csv"
-                )
+                st.download_button(label="📥 Download My Submission History (CSV)", data=csv_student, file_name=f"my_submitted_feedback_{user_info['username']}.csv", mime="text/csv")
 
-    # 3. TEACHER DASHBOARD
     elif user_info["role"] == "Teacher":
         teacher_id = user_info["username"]
         st.header("📊 Feedback Performance Insights")
-
+        
         try:
             conn = get_db_connection()
             df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_id = %s", conn, params=(teacher_id,))
@@ -423,7 +404,7 @@ else:
         except Exception as e:
             df_teacher = pd.DataFrame()
             st.error(f"Failed to fetch performance records: {e}")
-
+        
         if df_teacher.empty:
             st.info("No feedback has been submitted for you yet.")
         else:
@@ -431,62 +412,41 @@ else:
             col1, col2 = st.columns(2)
             col1.metric("Your Average Stars", f"{round(avg_stars, 2)} / 5.0")
             col2.metric("Total Feedbacks Received", f"{len(df_teacher)} Students")
-
+            
             st.subheader("📈 Performance Visualization Dashboard")
             v_col1, v_col2 = st.columns(2)
-
+            
             with v_col1:
                 st.markdown("#### 🌟 Star Distribution Trend")
                 star_group = df_teacher.groupby('stars').agg(
                     Count=('stars', 'count'),
                     Students=('student_name', lambda x: ", ".join(x))
                 ).reindex([1, 2, 3, 4, 5], fill_value=0).reset_index()
-
-                fig_stars = px.bar(
-                    star_group,
-                    x='stars',
-                    y='Count',
-                    text='Count',
-                    labels={'Count': 'Number of Students', 'stars': 'Rating Level', 'Students': 'Voted By'},
-                    hover_data={'Students': True}
-                )
+                
+                fig_stars = px.bar(star_group, x='stars', y='Count', text='Count', labels={'Count': 'Number of Students', 'stars': 'Rating Level', 'Students': 'Voted By'}, hover_data={'Students': True})
                 fig_stars.update_traces(textposition='outside')
                 fig_stars.update_layout(yaxis_range=[0, max(star_group['Count']) + 2], height=280)
                 st.plotly_chart(fig_stars, use_container_width=True)
-
+                
             with v_col2:
                 st.markdown("#### 🎭 Performance Categories Share")
                 cat_group = df_teacher.groupby('performance').agg(
                     Count=('performance', 'count'),
                     Students=('student_name', lambda x: ", ".join(x))
                 ).reset_index()
-
-                fig_pie = px.pie(
-                    cat_group,
-                    values='Count',
-                    names='performance',
-                    color='performance',
-                    labels={'Students': 'Students Group', 'performance': 'Category'},
-                    color_discrete_map={'Good': '#2ca02c', 'Moderate': '#ff7f0e', 'Low': '#d62728'},
-                    hover_data={'Students': True}
-                )
+                
+                fig_pie = px.pie(cat_group, values='Count', names='performance', color='performance', labels={'Students': 'Students Group', 'performance': 'Category'}, color_discrete_map={'Good': '#2ca02c', 'Moderate': '#ff7f0e', 'Low': '#d62728'}, hover_data={'Students': True})
                 fig_pie.update_traces(textinfo='label+percent+value')
                 fig_pie.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=280, showlegend=False)
                 st.plotly_chart(fig_pie, use_container_width=True)
-
+            
             st.markdown("---")
             st.subheader("📥 Export Evaluation Report")
             export_df = df_teacher[["student_name", "performance", "stars", "review"]].copy()
             export_df.columns = ["Student Name", "Performance Class", "Stars Rating", "Detailed Report Metrics Log"]
             csv_teacher_data = export_df.to_csv(index=False).encode('utf-8')
-            st.download_button(
-                label="📥 Download My Feedback Report (CSV)",
-                data=csv_teacher_data,
-                file_name=f"feedback_report_{teacher_id}.csv",
-                mime="text/csv",
-                use_container_width=True
-            )
-
+            st.download_button(label="📥 Download My Feedback Report (CSV)", data=csv_teacher_data, file_name=f"feedback_report_{teacher_id}.csv", mime="text/csv", use_container_width=True)
+            
             st.markdown("---")
             st.subheader("💡 What Students Say (For Your Improvement)")
             for idx, row in df_teacher.iterrows():
