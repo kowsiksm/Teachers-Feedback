@@ -98,28 +98,36 @@ def init_db():
 init_db()
 
 def get_top_teacher():
-    """Queries database directly to determine the top-rated teacher."""
+    """Queries database dynamically to calculate top-rated teacher(s)."""
     try:
         conn = get_db_connection()
         query = """
             SELECT teacher_id, teacher_name, AVG(stars) as avg_stars 
             FROM feedback 
             GROUP BY teacher_id, teacher_name 
-            ORDER BY avg_stars DESC 
-            LIMIT 1
+            ORDER BY avg_stars DESC
         """
         df = pd.read_sql(query, conn)
         conn.close()
+        
         if df.empty:
             return "N/A", "N/A", 0.0
-        top_teacher = df.iloc[0]
-        return top_teacher["teacher_name"], top_teacher["teacher_id"], round(top_teacher["avg_stars"], 2)
+        
+        # Determine maximum average score dynamically
+        max_rating = df["avg_stars"].max()
+        top_teachers_df = df[df["avg_stars"] == max_rating]
+        
+        names = ", ".join(top_teachers_df["teacher_name"].tolist())
+        ids = ", ".join(top_teachers_df["teacher_id"].tolist())
+        
+        return names, ids, round(max_rating, 2)
     except Exception:
         return "N/A", "N/A", 0.0
 
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 st.title("🎓 Teacher Performance Feedback Portal")
 
+# Dynamic Header Display
 top_name, top_id, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
