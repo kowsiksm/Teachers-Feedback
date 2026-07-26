@@ -11,7 +11,7 @@ DB_CONFIG = {
     "password": st.secrets["mysql"]["password"],
     "database": st.secrets["mysql"]["database"],
     "port": int(st.secrets["mysql"]["port"]),
-    "ssl_disabled": False  # Required for Aiven SSL connections
+    "ssl_mode": "REQUIRED"  # Crucial for Aiven MySQL connection
 }
 
 def get_db_connection():
@@ -85,7 +85,7 @@ def init_db():
     except Error as e:
         st.error(f"Error during Database Initialization: {e}")
 
-# Run setup
+# Run database table setup
 init_db()
 
 def get_top_teacher():
@@ -114,6 +114,7 @@ def get_top_teacher():
     except Exception:
         return "N/A", "N/A", 0.0
 
+# Page Setup
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 st.title("🎓 Teacher Performance Feedback Portal")
 
@@ -125,7 +126,7 @@ st.markdown("---")
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
-# Login Screen
+# --- LOGIN SCREEN ---
 if st.session_state.logged_in_user is None:
     st.subheader("🔑 Portal Gateways")
     col_login1, col_login2 = st.columns(2)
@@ -160,6 +161,7 @@ if st.session_state.logged_in_user is None:
         except Error as e:
             st.error(f"Database error during login: {e}")
 
+# --- DASHBOARDS AFTER LOGIN ---
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**")
@@ -168,7 +170,7 @@ else:
         st.session_state.logged_in_user = None
         st.rerun()
 
-    # ADMIN ROLE
+    # 1. ADMIN DASHBOARD
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
 
@@ -312,7 +314,7 @@ else:
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
 
-    # STUDENT ROLE
+    # 2. STUDENT DASHBOARD
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
 
@@ -410,7 +412,7 @@ else:
                     mime="text/csv"
                 )
 
-    # TEACHER ROLE
+    # 3. TEACHER DASHBOARD
     elif user_info["role"] == "Teacher":
         teacher_id = user_info["username"]
         st.header("📊 Feedback Performance Insights")
