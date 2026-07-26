@@ -4,14 +4,14 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
-# Load credentials securely from Streamlit Cloud Secrets (stored under [mysql])
+# Load credentials securely from Streamlit Cloud Secrets
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
     "password": st.secrets["mysql"]["password"],
     "database": st.secrets["mysql"]["database"],
     "port": int(st.secrets["mysql"]["port"]),
-    "ssl_disabled": False  # Required by Aiven MySQL connections
+    "ssl_disabled": False  # Required for Aiven SSL connections
 }
 
 def get_db_connection():
@@ -24,7 +24,7 @@ def init_db():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        # Create Users table
+        # Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 username VARCHAR(50) PRIMARY KEY,
@@ -34,7 +34,7 @@ def init_db():
             )
         """)
 
-        # Create Feedback table
+        # Feedback table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS feedback (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -47,7 +47,7 @@ def init_db():
             )
         """)
 
-        # Seed default users if table is empty
+        # Seed default users if empty
         cursor.execute("SELECT COUNT(*) FROM users")
         if cursor.fetchone()[0] == 0:
             default_users = [
@@ -65,7 +65,7 @@ def init_db():
             )
             conn.commit()
 
-        # Seed default feedback if table is empty
+        # Seed default feedback if empty
         cursor.execute("SELECT COUNT(*) FROM feedback")
         if cursor.fetchone()[0] == 0:
             default_feedback = [
@@ -85,7 +85,7 @@ def init_db():
     except Error as e:
         st.error(f"Error during Database Initialization: {e}")
 
-# Run database setup
+# Run setup
 init_db()
 
 def get_top_teacher():
@@ -114,11 +114,10 @@ def get_top_teacher():
     except Exception:
         return "N/A", "N/A", 0.0
 
-# --- App UI Setup ---
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 st.title("🎓 Teacher Performance Feedback Portal")
 
-# Dynamic Header Display
+# Top Header Banner
 top_name, top_id, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
@@ -126,7 +125,7 @@ st.markdown("---")
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
-# --- Unauthenticated View ---
+# Login Screen
 if st.session_state.logged_in_user is None:
     st.subheader("🔑 Portal Gateways")
     col_login1, col_login2 = st.columns(2)
@@ -161,7 +160,6 @@ if st.session_state.logged_in_user is None:
         except Error as e:
             st.error(f"Database error during login: {e}")
 
-# --- Authenticated Views ---
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**")
@@ -170,7 +168,7 @@ else:
         st.session_state.logged_in_user = None
         st.rerun()
 
-    # --- 1. ADMIN ROLE ---
+    # ADMIN ROLE
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
 
@@ -285,7 +283,7 @@ else:
             with tab_students:
                 st.dataframe(users_df[users_df["Role"] == "Student"][["User ID", "Name"]], use_container_width=True, height=200, hide_index=True)
             with tab_teachers:
-                st.dataframe(users_df[users_df["Role"] == "Teacher"][["User ID", "Name"]], use_container_width=True, height=200, hide_index=True)
+                st.dataframe(users_df[users_df["Role"] == "Teacher"][["User ID", "Name"]], use_container_width=True, hide_index=True)
 
             st.markdown("---")
             st.subheader("🗑️ Danger Zone: Remove User Record")
@@ -314,7 +312,7 @@ else:
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
 
-    # --- 2. STUDENT ROLE ---
+    # STUDENT ROLE
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
 
@@ -412,7 +410,7 @@ else:
                     mime="text/csv"
                 )
 
-    # --- 3. TEACHER ROLE ---
+    # TEACHER ROLE
     elif user_info["role"] == "Teacher":
         teacher_id = user_info["username"]
         st.header("📊 Feedback Performance Insights")
