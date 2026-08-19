@@ -59,7 +59,7 @@ def init_db():
             default_users = [
                 ("admin", "admin123", "Admin", "System Admin"),
                 ("T101", "teach123", "Teacher", "Dr. S.Uma"),
-                ("T102", "teach123", "Teacher", "Prof. K.Arun"),
+                ("T102", "teach123", "Teacher", "Prof. K. Arun"),
                 ("T103", "teach123", "Teacher", "Dr. P.Anu"),
                 ("T104", "teach123", "Teacher", "Prof. S.Senthil"),
                 ("T105", "teach123", "Teacher", "Dr. K.Priya"),
@@ -84,31 +84,30 @@ if "db_initialized" not in st.session_state:
 def get_top_teacher():
     try:
         conn = get_active_conn()
+        # FIXED: Grouping by teacher_name to avoid duplicates caused by varying IDs
         query = """
-            SELECT teacher_id, teacher_name, AVG(stars) as avg_stars 
+            SELECT teacher_name, AVG(stars) as avg_stars 
             FROM feedback 
-            GROUP BY teacher_id, teacher_name 
+            GROUP BY teacher_name 
             ORDER BY avg_stars DESC
         """
         df = pd.read_sql(query, conn)
 
         if df.empty:
-            return "N/A", "N/A", 0.0
+            return "N/A", 0.0
 
         max_rating = df["avg_stars"].max()
         top_teachers_df = df[df["avg_stars"] == max_rating]
 
         names = ", ".join(top_teachers_df["teacher_name"].tolist())
-        ids = ", ".join(top_teachers_df["teacher_id"].tolist())
-
-        return names, ids, round(max_rating, 2)
+        return names, round(max_rating, 2)
     except Exception:
-        return "N/A", "N/A", 0.0
+        return "N/A", 0.0
 
 # Top Header Banner
 st.title("🎓 Teacher Performance Feedback Portal")
-top_name, top_id, top_rating = get_top_teacher()
-st.info(f"🏆 **Top Ranked Teacher:** {top_name} (ID: {top_id}) | ⭐ **Avg Rating:** {top_rating}/5")
+top_name, top_rating = get_top_teacher()
+st.info(f"🏆 **Top Ranked Teacher:** {top_name} | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
 
 if "logged_in_user" not in st.session_state:
@@ -174,7 +173,11 @@ else:
         if not df_all.empty:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
 
-            ranking_metrics = df_all.groupby(["teacher_id", "teacher_name"]).agg(
+            # FIXED: Standardize faculty names string formatting to avoid duplicate name bars
+            df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
+
+            # FIXED: Group strictly by teacher_name to aggregate all ratings together cleanly
+            ranking_metrics = df_all.groupby("teacher_name").agg(
                 avg_stars=("stars", "mean"),
                 total_reviews=("stars", "count"),
                 students=("student_name", lambda x: ", ".join(x.unique()))
@@ -397,12 +400,13 @@ else:
 
     # 3. TEACHER DASHBOARD
     elif user_info["role"] == "Teacher":
-        teacher_id = user_info["username"]
+        teacher_name = user_info["name"]
         st.header("📊 Feedback Performance Insights")
 
         try:
             conn = get_active_conn()
-            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_id = %s", conn, params=(teacher_id,))
+            # Fetch by teacher name to ensure all feedback records match regardless of minor ID variations
+            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", conn, params=(teacher_name,))
         except Exception as e:
             df_teacher = pd.DataFrame()
             st.error(f"Failed to fetch performance records: {e}")
@@ -465,7 +469,7 @@ else:
             st.download_button(
                 label="📥 Download My Feedback Report (CSV)",
                 data=csv_teacher_data,
-                file_name=f"feedback_report_{teacher_id}.csv",
+                file_name=f"feedback_report_{user_info['username']}.csv",
                 mime="text/csv",
                 use_container_width=True
             )
