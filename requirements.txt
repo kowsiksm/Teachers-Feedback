@@ -1,4 +1,5 @@
 streamlit>=1.30.0
 pandas>=2.0.0
 plotly>=5.18.0
-mysql-connector-python>=8.1.0
+pymysql>=1.1.0
+sqlalchemy>=2.0.0
