@@ -84,7 +84,6 @@ if "db_initialized" not in st.session_state:
 def get_top_teacher():
     try:
         conn = get_active_conn()
-        # FIXED: Grouping by teacher_name to avoid duplicates caused by varying IDs
         query = """
             SELECT teacher_name, AVG(stars) as avg_stars 
             FROM feedback 
@@ -173,10 +172,19 @@ else:
         if not df_all.empty:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
 
-            # FIXED: Standardize faculty names string formatting to avoid duplicate name bars
+            # 1. Clean whitespace and title case
             df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
 
-            # FIXED: Group strictly by teacher_name to aggregate all ratings together cleanly
+            # 2. Map spelling/spacing variations to a single uniform string to eliminate duplicates
+            name_mapping = {
+                "Prof. K.Arun": "Prof. K. Arun",
+                "Prof K Arun": "Prof. K. Arun",
+                "K. Arun": "Prof. K. Arun",
+                "K.Arun": "Prof. K. Arun"
+            }
+            df_all["teacher_name"] = df_all["teacher_name"].replace(name_mapping)
+
+            # Group strictly by unified teacher name
             ranking_metrics = df_all.groupby("teacher_name").agg(
                 avg_stars=("stars", "mean"),
                 total_reviews=("stars", "count"),
@@ -405,7 +413,6 @@ else:
 
         try:
             conn = get_active_conn()
-            # Fetch by teacher name to ensure all feedback records match regardless of minor ID variations
             df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", conn, params=(teacher_name,))
         except Exception as e:
             df_teacher = pd.DataFrame()
