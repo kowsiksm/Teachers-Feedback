@@ -87,7 +87,7 @@ def get_top_teacher():
         query = """
             SELECT teacher_name, AVG(stars) as avg_stars 
             FROM feedback 
-            GROUP BY teacher_name 
+            GROUP BY teacher_id, teacher_name 
             ORDER BY avg_stars DESC
         """
         df = pd.read_sql(query, conn)
@@ -172,20 +172,12 @@ else:
         if not df_all.empty:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
 
-            # 1. Clean whitespace and title case
+            # Clean whitespace and standardize teacher names
             df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
 
-            # 2. Map spelling/spacing variations to a single uniform string to eliminate duplicates
-            name_mapping = {
-                "Prof. K.Arun": "Prof. K. Arun",
-                "Prof K Arun": "Prof. K. Arun",
-                "K. Arun": "Prof. K. Arun",
-                "K.Arun": "Prof. K. Arun"
-            }
-            df_all["teacher_name"] = df_all["teacher_name"].replace(name_mapping)
-
-            # Group strictly by unified teacher name
-            ranking_metrics = df_all.groupby("teacher_name").agg(
+            # Group strictly by teacher_id so unique IDs combine all entries into one bar
+            ranking_metrics = df_all.groupby("teacher_id").agg(
+                teacher_name=("teacher_name", "first"),
                 avg_stars=("stars", "mean"),
                 total_reviews=("stars", "count"),
                 students=("student_name", lambda x: ", ".join(x.unique()))
