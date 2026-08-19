@@ -175,6 +175,9 @@ else:
             # Clean whitespace and standardize teacher names
             df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
 
+            # OPTIONAL: Uncomment the line below if you want to completely remove a specific teacher from the chart
+            # df_all = df_all[df_all["teacher_name"] != "Prof. K. Arun"]
+
             # Group strictly by teacher_id so unique IDs combine all entries into one bar
             ranking_metrics = df_all.groupby("teacher_id").agg(
                 teacher_name=("teacher_name", "first"),
