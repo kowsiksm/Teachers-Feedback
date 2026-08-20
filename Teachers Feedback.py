@@ -56,7 +56,7 @@ def init_db():
             default_users = [
                 ("admin", "admin123", "Admin", "System Admin"),
                 ("T101", "teach123", "Teacher", "Dr. S.Uma"),
-                ("T102", "teach123", "Teacher", "Prof. K.Arun"),
+                ("T102", "teach123", "Teacher", "Prof. K. Arun"),
                 ("T103", "teach123", "Teacher", "Dr. P.Anu"),
                 ("T104", "teach123", "Teacher", "Prof. S.Senthil"),
                 ("T105", "teach123", "Teacher", "Dr. K.Priya"),
@@ -90,9 +90,6 @@ def get_top_teacher():
 
         if df.empty:
             return "N/A", 0.0
-
-        # Dynamic replacement for visualization and stats
-        df["teacher_name"] = df["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
 
         max_rating = df["avg_stars"].max()
         top_teachers_df = df[df["avg_stars"] == max_rating]
@@ -139,8 +136,6 @@ if st.session_state.logged_in_user is None:
             cursor.close()
 
             if user_record:
-                if user_record["name"] == "Prof. K. Arun":
-                    user_record["name"] = "Prof. V. Ramesh"
                 st.session_state.logged_in_user = user_record
                 st.rerun()
             else:
@@ -162,8 +157,6 @@ else:
         try:
             conn = get_active_conn()
             df_all = pd.read_sql("SELECT * FROM feedback", conn)
-            # Replace Prof. K. Arun with Prof. V. Ramesh across all chart data logs
-            df_all["teacher_name"] = df_all["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
         except Exception as e:
             df_all = pd.DataFrame()
             st.error(f"Failed to fetch feedback logs: {e}")
@@ -262,7 +255,6 @@ else:
             try:
                 conn = get_active_conn()
                 users_df = pd.read_sql("SELECT username as `User ID`, name as `Name`, role as `Role` FROM users", conn)
-                users_df["Name"] = users_df["Name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
             except Exception as e:
                 users_df = pd.DataFrame(columns=["User ID", "Name", "Role"])
                 st.error(f"Failed to fetch user directory: {e}")
@@ -308,10 +300,7 @@ else:
             conn = get_active_conn()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SELECT username, name FROM users WHERE role = 'Teacher'")
-            teachers_list = {}
-            for row in cursor.fetchall():
-                t_name = "Prof. V. Ramesh" if row["name"] == "Prof. K. Arun" else row["name"]
-                teachers_list[row["username"]] = t_name
+            teachers_list = {row["username"]: row["name"] for row in cursor.fetchall()}
             cursor.close()
         except Error as e:
             teachers_list = {}
@@ -379,7 +368,6 @@ else:
                     conn, 
                     params=(user_info["name"],)
                 )
-                df_student_history["teacher_name"] = df_student_history["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
             except Exception as e:
                 df_student_history = pd.DataFrame()
                 st.error(f"Could not load your history: {e}")
@@ -405,9 +393,7 @@ else:
 
         try:
             conn = get_active_conn()
-            # Handle both names for safety so old records display correctly
-            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s OR teacher_name = 'Prof. K. Arun'", conn, params=(teacher_name,))
-            df_teacher["teacher_name"] = "Prof. V. Ramesh"
+            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", conn, params=(teacher_name,))
         except Exception as e:
             df_teacher = pd.DataFrame()
             st.error(f"Failed to fetch performance records: {e}")
