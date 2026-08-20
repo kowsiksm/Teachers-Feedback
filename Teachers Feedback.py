@@ -91,7 +91,7 @@ def get_top_teacher():
         if df.empty:
             return "N/A", 0.0
 
-        # Replace name dynamically if it exists
+        # Dynamic replacement for visualization and stats
         df["teacher_name"] = df["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
 
         max_rating = df["avg_stars"].max()
@@ -139,7 +139,6 @@ if st.session_state.logged_in_user is None:
             cursor.close()
 
             if user_record:
-                # Clean name in session record if needed
                 if user_record["name"] == "Prof. K. Arun":
                     user_record["name"] = "Prof. V. Ramesh"
                 st.session_state.logged_in_user = user_record
@@ -163,7 +162,7 @@ else:
         try:
             conn = get_active_conn()
             df_all = pd.read_sql("SELECT * FROM feedback", conn)
-            # Dynamic Name Replacement
+            # Replace Prof. K. Arun with Prof. V. Ramesh across all chart data logs
             df_all["teacher_name"] = df_all["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
         except Exception as e:
             df_all = pd.DataFrame()
@@ -401,12 +400,13 @@ else:
                 )
 
     elif user_info["role"] == "Teacher":
-        teacher_name = "Prof. K. Arun" if user_info["name"] == "Prof. V. Ramesh" else user_info["name"]
+        teacher_name = user_info["name"]
         st.header("📊 Feedback Performance Insights")
 
         try:
             conn = get_active_conn()
-            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s OR teacher_name = 'Prof. K. Arun'", conn, params=(user_info["name"],))
+            # Handle both names for safety so old records display correctly
+            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s OR teacher_name = 'Prof. K. Arun'", conn, params=(teacher_name,))
             df_teacher["teacher_name"] = "Prof. V. Ramesh"
         except Exception as e:
             df_teacher = pd.DataFrame()
