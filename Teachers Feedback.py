@@ -4,7 +4,6 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
-
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 
 DB_CONFIG = {
@@ -15,7 +14,6 @@ DB_CONFIG = {
     "port": int(st.secrets["mysql"]["port"]),
     "ssl_disabled": False
 }
-
 
 @st.cache_resource
 def get_db_connection():
@@ -74,7 +72,6 @@ def init_db():
     except Error as e:
         st.error(f"Error during Database Initialization: {e}")
 
-
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state.db_initialized = True
@@ -93,6 +90,9 @@ def get_top_teacher():
 
         if df.empty:
             return "N/A", 0.0
+
+        # Replace name dynamically if it exists
+        df["teacher_name"] = df["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
 
         max_rating = df["avg_stars"].max()
         top_teachers_df = df[df["avg_stars"] == max_rating]
@@ -139,6 +139,9 @@ if st.session_state.logged_in_user is None:
             cursor.close()
 
             if user_record:
+                # Clean name in session record if needed
+                if user_record["name"] == "Prof. K. Arun":
+                    user_record["name"] = "Prof. V. Ramesh"
                 st.session_state.logged_in_user = user_record
                 st.rerun()
             else:
@@ -160,6 +163,8 @@ else:
         try:
             conn = get_active_conn()
             df_all = pd.read_sql("SELECT * FROM feedback", conn)
+            # Dynamic Name Replacement
+            df_all["teacher_name"] = df_all["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
         except Exception as e:
             df_all = pd.DataFrame()
             st.error(f"Failed to fetch feedback logs: {e}")
@@ -168,7 +173,6 @@ else:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
 
             df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
-
 
             ranking_metrics = df_all.groupby("teacher_id").agg(
                 teacher_name=("teacher_name", "first"),
@@ -259,6 +263,7 @@ else:
             try:
                 conn = get_active_conn()
                 users_df = pd.read_sql("SELECT username as `User ID`, name as `Name`, role as `Role` FROM users", conn)
+                users_df["Name"] = users_df["Name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
             except Exception as e:
                 users_df = pd.DataFrame(columns=["User ID", "Name", "Role"])
                 st.error(f"Failed to fetch user directory: {e}")
@@ -304,7 +309,10 @@ else:
             conn = get_active_conn()
             cursor = conn.cursor(dictionary=True)
             cursor.execute("SELECT username, name FROM users WHERE role = 'Teacher'")
-            teachers_list = {row["username"]: row["name"] for row in cursor.fetchall()}
+            teachers_list = {}
+            for row in cursor.fetchall():
+                t_name = "Prof. V. Ramesh" if row["name"] == "Prof. K. Arun" else row["name"]
+                teachers_list[row["username"]] = t_name
             cursor.close()
         except Error as e:
             teachers_list = {}
@@ -372,6 +380,7 @@ else:
                     conn, 
                     params=(user_info["name"],)
                 )
+                df_student_history["teacher_name"] = df_student_history["teacher_name"].replace("Prof. K. Arun", "Prof. V. Ramesh")
             except Exception as e:
                 df_student_history = pd.DataFrame()
                 st.error(f"Could not load your history: {e}")
@@ -392,12 +401,13 @@ else:
                 )
 
     elif user_info["role"] == "Teacher":
-        teacher_name = user_info["name"]
+        teacher_name = "Prof. K. Arun" if user_info["name"] == "Prof. V. Ramesh" else user_info["name"]
         st.header("📊 Feedback Performance Insights")
 
         try:
             conn = get_active_conn()
-            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", conn, params=(teacher_name,))
+            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s OR teacher_name = 'Prof. K. Arun'", conn, params=(user_info["name"],))
+            df_teacher["teacher_name"] = "Prof. V. Ramesh"
         except Exception as e:
             df_teacher = pd.DataFrame()
             st.error(f"Failed to fetch performance records: {e}")
