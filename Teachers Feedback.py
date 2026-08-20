@@ -4,10 +4,10 @@ import plotly.express as px
 import mysql.connector
 from mysql.connector import Error
 
-# 1. MUST BE THE VERY FIRST STREAMLIT COMMAND IN THE SCRIPT
+
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 
-# 2. Database credentials from Streamlit Secrets
+
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
@@ -17,7 +17,7 @@ DB_CONFIG = {
     "ssl_disabled": False
 }
 
-# 3. Cached connection pool for instant loading
+
 @st.cache_resource
 def get_db_connection():
     return mysql.connector.connect(**DB_CONFIG)
@@ -75,7 +75,7 @@ def init_db():
     except Error as e:
         st.error(f"Error during Database Initialization: {e}")
 
-# Run database setup safely
+
 if "db_initialized" not in st.session_state:
     init_db()
     st.session_state.db_initialized = True
@@ -103,7 +103,6 @@ def get_top_teacher():
     except Exception:
         return "N/A", 0.0
 
-# Top Header Banner
 st.title("🎓 Teacher Performance Feedback Portal")
 top_name, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} | ⭐ **Avg Rating:** {top_rating}/5")
@@ -112,7 +111,6 @@ st.markdown("---")
 if "logged_in_user" not in st.session_state:
     st.session_state.logged_in_user = None
 
-# --- LOGIN SCREEN ---
 if st.session_state.logged_in_user is None:
     st.subheader("🔑 Portal Gateways")
     col_login1, col_login2 = st.columns(2)
@@ -149,7 +147,6 @@ if st.session_state.logged_in_user is None:
         except Error as e:
             st.error(f"Database error during login: {e}")
 
-# --- DASHBOARDS AFTER LOGIN ---
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**")
@@ -158,7 +155,6 @@ else:
         st.session_state.logged_in_user = None
         st.rerun()
 
-    # 1. ADMIN DASHBOARD
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console & Institutional Insights")
 
@@ -172,13 +168,9 @@ else:
         if not df_all.empty:
             st.subheader("📊 Faculty Quality Rankings Leaderboard")
 
-            # Clean whitespace and standardize teacher names
             df_all["teacher_name"] = df_all["teacher_name"].str.strip().str.title()
 
-            # OPTIONAL: Uncomment the line below if you want to completely remove a specific teacher from the chart
-            # df_all = df_all[df_all["teacher_name"] != "Prof. K. Arun"]
 
-            # Group strictly by teacher_id so unique IDs combine all entries into one bar
             ranking_metrics = df_all.groupby("teacher_id").agg(
                 teacher_name=("teacher_name", "first"),
                 avg_stars=("stars", "mean"),
@@ -306,7 +298,6 @@ else:
                     except Error as e:
                         st.error(f"Error during deletion: {e}")
 
-    # 2. STUDENT DASHBOARD
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback Matrix")
 
@@ -401,7 +392,6 @@ else:
                     mime="text/csv"
                 )
 
-    # 3. TEACHER DASHBOARD
     elif user_info["role"] == "Teacher":
         teacher_name = user_info["name"]
         st.header("📊 Feedback Performance Insights")
