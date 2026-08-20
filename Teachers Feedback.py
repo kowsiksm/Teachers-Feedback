@@ -56,7 +56,7 @@ def init_db():
             default_users = [
                 ("admin", "admin123", "Admin", "System Admin"),
                 ("T101", "teach123", "Teacher", "Dr. S.Uma"),
-                ("T102", "teach123", "Teacher", "Prof. V. Ramesh"),
+                ("T102", "teach123", "Teacher", "Prof. K.Arun"),
                 ("T103", "teach123", "Teacher", "Dr. P.Anu"),
                 ("T104", "teach123", "Teacher", "Prof. S.Senthil"),
                 ("T105", "teach123", "Teacher", "Dr. K.Priya"),
