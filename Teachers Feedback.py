@@ -7,7 +7,6 @@ from mysql.connector import Error
 
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 
-
 DB_CONFIG = {
     "host": st.secrets["mysql"]["host"],
     "user": st.secrets["mysql"]["user"],
