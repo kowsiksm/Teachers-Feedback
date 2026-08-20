@@ -435,14 +435,13 @@ else:
                     Students=('student_name', lambda x: ", ".join(x))
                 ).reset_index()
 
+                # Fixed Plotly Express Pie Chart configuration to prevent hover collisions
                 fig_pie = px.pie(
                     cat_group,
                     values='Count',
                     names='performance',
-                    color='performance',
-                    labels={'Students': 'Students Group', 'performance': 'Category'},
                     color_discrete_map={'Good': '#2ca02c', 'Moderate': '#ff7f0e', 'Low': '#d62728'},
-                    hover_data={'Students': True}
+                    hover_data=['Students']
                 )
                 fig_pie.update_traces(textinfo='label+percent+value')
                 fig_pie.update_layout(margin=dict(t=20, b=20, l=20, r=20), height=280, showlegend=False)
