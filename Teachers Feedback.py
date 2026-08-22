@@ -80,15 +80,49 @@ else:
             with st.form("add_user", clear_on_submit=True):
                 st.subheader("➕ Onboard User")
                 uid, name, pwd, role = st.text_input("ID"), st.text_input("Name"), st.text_input("Password", type="password"), st.selectbox("Role", ["Student", "Teacher"])
-                if st.form_submit_button("Save"):
+                if st.form_submit_button("Save User"):
                     if uid and name and pwd:
-                        conn = get_active_conn(); cur = conn.cursor()
-                        cur.execute("INSERT INTO users VALUES (%s, %s, %s, %s)", (uid, pwd, role, name)); conn.commit(); cur.close()
-                        st.success("Added!"); st.rerun()
+                        try:
+                            conn = get_active_conn(); cur = conn.cursor()
+                            cur.execute("INSERT INTO users VALUES (%s, %s, %s, %s)", (uid, pwd, role, name))
+                            conn.commit(); cur.close()
+                            st.success("User added successfully!")
+                            st.rerun()
+                        except Error as e: st.error(f"Error: {e}")
+                    else: st.warning("Please fill all fields.")
+                    
         with c2:
-            st.subheader("📋 Users Directory")
-            try: st.dataframe(pd.read_sql("SELECT username as `ID`, name as `Name`, role as `Role` FROM users", get_active_conn()), use_container_width=True, hide_index=True)
-            except: pass
+            with st.form("delete_user_form"):
+                st.subheader("🗑️ Delete User ID")
+                try:
+                    df_users_all = pd.read_sql("SELECT username, name, role FROM users WHERE username != 'admin'", get_active_conn())
+                    user_list = df_users_all['username'].tolist() if not df_users_all.empty else []
+                except: user_list = []
+                
+                del_uid = st.selectbox("Select User ID to Remove", user_list) if user_list else st.selectbox("No users available", [""])
+                if st.form_submit_button("Delete User"):
+                    if del_uid and del_uid != "":
+                        try:
+                            conn = get_active_conn(); cur = conn.cursor()
+                            cur.execute("DELETE FROM users WHERE username = %s", (del_uid,))
+                            conn.commit(); cur.close()
+                            st.success(f"User {del_uid} deleted successfully!")
+                            st.rerun()
+                        except Error as e: st.error(f"Error: {e}")
+
+        st.markdown("---")
+        st.subheader("📋 Categorized Users Directory")
+        try:
+            df_dir = pd.read_sql("SELECT username as `ID`, name as `Name`, role as `Role` FROM users", get_active_conn())
+            if not df_dir.empty:
+                tab_t, tab_s = st.tabs(["👩‍🏫 Teachers Directory", "👨‍🎓 Students Directory"])
+                with tab_t:
+                    teachers_df = df_dir[df_dir["Role"] == "Teacher"]
+                    st.dataframe(teachers_df, use_container_width=True, hide_index=True)
+                with tab_s:
+                    students_df = df_dir[df_dir["Role"] == "Student"]
+                    st.dataframe(students_df, use_container_width=True, hide_index=True)
+        except Exception as e: st.error(f"Could not load directory: {e}")
 
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback")
