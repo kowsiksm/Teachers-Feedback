@@ -101,6 +101,35 @@ else:
                 hover_data=["leaderboard_rank", "total_reviews", "voted_by"]
             )
             st.plotly_chart(fig_ranking, use_container_width=True)
+
+        # Export Institutional Insights Data Section
+        st.markdown("### 📥 Export Institutional Insights Data")
+        exp_col1, exp_col2 = st.columns(2)
+        with exp_col1:
+            try:
+                master_csv = df_all.to_csv(index=False).encode('utf-8') if not df_all.empty else b""
+                st.download_button(
+                    label="📥 Download Master Feedback Log (CSV)",
+                    data=master_csv,
+                    file_name="master_feedback_log.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error preparing export: {e}")
+        with exp_col2:
+            try:
+                agg_csv = ranking.to_csv(index=False).encode('utf-8') if 'ranking' in locals() and not ranking.empty else b""
+                st.download_button(
+                    label="📥 Download Aggregated Performance Report (CSV)",
+                    data=agg_csv,
+                    file_name="aggregated_performance_report.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
+            except Exception as e:
+                st.error(f"Error preparing export: {e}")
+        st.markdown("---")
             
         c1, c2 = st.columns(2)
         with c1:
