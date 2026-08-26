@@ -258,22 +258,19 @@ else:
                 st.markdown("---")
                 st.markdown("**Overall Score Star Selection (Optional override link):**")
                 
-                star_options = {
-                    "⭐ (1 Star)": 1,
-                    "⭐⭐ (2 Stars)": 2,
-                    "⭐⭐⭐ (3 Stars)": 3,
-                    "⭐⭐⭐⭐ (4 Stars)": 4,
-                    "⭐⭐⭐⭐⭐ (5 Stars)": 5
-                }
-                selected_star_label = st.radio("Rating selection", options=list(star_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
-                override_star = star_options[selected_star_label]
+                star_selection = st.feedback("stars", key="overall_stars_widget")
                 
                 st.markdown("**Paragraph Review / Detailed Comments**")
                 rev = st.text_area("Provide instructional feedback here regarding lessons...")
                 
                 if st.form_submit_button("Submit"):
                     calc_avg = (ml + md + mp + mi + mc) / 5
-                    final_stars = override_star if override_star != 5 else round(calc_avg)
+                    
+                    if star_selection is not None:
+                        override_star = int(star_selection) + 1
+                        final_stars = override_star
+                    else:
+                        final_stars = round(calc_avg)
                     
                     if final_stars >= 4:
                         perf = "Good"
