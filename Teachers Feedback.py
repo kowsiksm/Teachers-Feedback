@@ -257,7 +257,16 @@ else:
                 
                 st.markdown("---")
                 st.markdown("**Overall Score Star Selection (Optional override link):**")
-                override_star = st.select_slider("", options=[1, 2, 3, 4, 5], value=5, format_func=lambda x: "⭐" * x)
+                
+                star_options = {
+                    "⭐ (1 Star)": 1,
+                    "⭐⭐ (2 Stars)": 2,
+                    "⭐⭐⭐ (3 Stars)": 3,
+                    "⭐⭐⭐⭐ (4 Stars)": 4,
+                    "⭐⭐⭐⭐⭐ (5 Stars)": 5
+                }
+                selected_star_label = st.radio("Rating selection", options=list(star_options.keys()), index=4, horizontal=True, label_visibility="collapsed")
+                override_star = star_options[selected_star_label]
                 
                 st.markdown("**Paragraph Review / Detailed Comments**")
                 rev = st.text_area("Provide instructional feedback here regarding lessons...")
