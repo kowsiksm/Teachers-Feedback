@@ -3,7 +3,7 @@ from mysql.connector import Error
 
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 
-# Safe configuration check for secrets
+
 try:
     DB_CONFIG = {
         "host": st.secrets["mysql"]["host"], 
@@ -127,11 +127,14 @@ else:
             ranking["avg_stars"] = ranking["avg_stars"].round(2)
             ranking["leaderboard_rank"] = ranking["avg_stars"].rank(ascending=False, method="min").astype(int)
             ranking = ranking.sort_values(by="leaderboard_rank")
+            
+            ranking["rating_display"] = ranking["avg_stars"].astype(str) + " ⭐"
 
             fig_ranking = px.bar(
                 ranking, 
                 x="teacher_name", 
                 y="avg_stars", 
+                text="rating_display",
                 title="Faculty Rankings & Performance Details", 
                 color="avg_stars", 
                 color_continuous_scale="turbo",
@@ -144,6 +147,7 @@ else:
                 },
                 hover_data=["leaderboard_rank", "total_reviews", "voted_by"]
             )
+            fig_ranking.update_traces(textposition='outside')
             st.plotly_chart(fig_ranking, use_container_width=True)
 
         st.markdown("### 📥 Export Institutional Insights Data")
