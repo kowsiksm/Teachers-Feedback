@@ -7,12 +7,21 @@ DB_CONFIG = {"host": st.secrets["mysql"]["host"], "user": st.secrets["mysql"]["u
              "port": int(st.secrets["mysql"]["port"]), "ssl_disabled": False}
 
 @st.cache_resource
-def get_db_connection(): return mysql.connector.connect(**DB_CONFIG)
+def get_db_connection(): 
+    return mysql.connector.connect(**DB_CONFIG)
 
 def get_active_conn():
-    conn = get_db_connection()
-    if not conn.is_connected(): conn.reconnect(attempts=3, delay=1)
-    return conn
+    try:
+        conn = get_db_connection()
+        if not conn.is_connected():
+            conn.reconnect(attempts=3, delay=1)
+        else:
+            conn.ping(reconnect=True, attempts=3, delay=1)
+        return conn
+    except Exception:
+        # Fallback to fresh connection if cached handle is completely dead
+        st.cache_resource.clear()
+        return mysql.connector.connect(**DB_CONFIG)
 
 def init_db():
     try:
@@ -204,7 +213,6 @@ else:
                 
                 if st.form_submit_button("Submit Evaluative Feedback", use_container_width=True):
                     avg = (ml + md + mp + mi + mc) / 5
-                    # Automatic classification into Good / Moderate / Low
                     if avg >= 4.0:
                         perf = "Good"
                     elif avg >= 2.5:
