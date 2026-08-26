@@ -72,8 +72,35 @@ else:
         except: df_all = pd.DataFrame()
         
         if not df_all.empty:
-            ranking = df_all.groupby("teacher_id").agg(teacher_name=("teacher_name", "first"), avg_stars=("stars", "mean"), total_reviews=("stars", "count")).reset_index().sort_values(by="avg_stars", ascending=False)
-            st.plotly_chart(px.bar(ranking, x="teacher_name", y="avg_stars", title="Faculty Rankings", color="avg_stars", color_continuous_scale="turbo"), use_container_width=True)
+            ranking = df_all.groupby("teacher_id").agg(
+                teacher_name=("teacher_name", "first"), 
+                avg_stars=("stars", "mean"), 
+                total_reviews=("stars", "count"),
+                voted_by=("student_name", lambda x: ", ".join(x.unique()))
+            ).reset_index().sort_values(by="avg_stars", ascending=False)
+            
+            # Add Leaderboard Rank column
+            ranking["avg_stars"] = ranking["avg_stars"].round(2)
+            ranking["leaderboard_rank"] = ranking["avg_stars"].rank(ascending=False, method="min").astype(int)
+            ranking = ranking.sort_values(by="leaderboard_rank")
+
+            fig_ranking = px.bar(
+                ranking, 
+                x="teacher_name", 
+                y="avg_stars", 
+                title="Faculty Rankings & Performance Details", 
+                color="avg_stars", 
+                color_continuous_scale="turbo",
+                labels={
+                    "teacher_name": "Faculty Member Name", 
+                    "avg_stars": "Average Rating Score", 
+                    "leaderboard_rank": "Leaderboard Rank", 
+                    "total_reviews": "Total Students Voted", 
+                    "voted_by": "Voted By"
+                },
+                hover_data=["leaderboard_rank", "total_reviews", "voted_by"]
+            )
+            st.plotly_chart(fig_ranking, use_container_width=True)
             
         c1, c2 = st.columns(2)
         with c1:
