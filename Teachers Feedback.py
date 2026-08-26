@@ -2,17 +2,29 @@ import streamlit as st, pandas as pd, plotly.express as px, mysql.connector
 from mysql.connector import Error
 
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
-DB_CONFIG = {"host": st.secrets["mysql"]["host"], "user": st.secrets["mysql"]["user"], 
-             "password": st.secrets["mysql"]["password"], "database": st.secrets["mysql"]["database"], 
-             "port": int(st.secrets["mysql"]["port"]), "ssl_disabled": False}
+
+# Safe configuration check for secrets
+try:
+    DB_CONFIG = {
+        "host": st.secrets["mysql"]["host"], 
+        "user": st.secrets["mysql"]["user"], 
+        "password": st.secrets["mysql"]["password"], 
+        "database": st.secrets["mysql"]["database"], 
+        "port": int(st.secrets["mysql"]["port"]), 
+        "ssl_disabled": False
+    }
+except Exception:
+    DB_CONFIG = None
 
 @st.cache_resource
 def get_db_connection(): 
+    if not DB_CONFIG: return None
     return mysql.connector.connect(**DB_CONFIG)
 
 def get_active_conn():
     try:
         conn = get_db_connection()
+        if not conn: return None
         if not conn.is_connected():
             conn.reconnect(attempts=3, delay=1)
         else:
@@ -20,11 +32,16 @@ def get_active_conn():
         return conn
     except Exception:
         st.cache_resource.clear()
-        return mysql.connector.connect(**DB_CONFIG)
+        try:
+            return mysql.connector.connect(**DB_CONFIG)
+        except:
+            return None
 
 def init_db():
     try:
-        conn = get_active_conn(); cursor = conn.cursor()
+        conn = get_active_conn()
+        if not conn: return
+        cursor = conn.cursor()
         cursor.execute("CREATE TABLE IF NOT EXISTS users (username VARCHAR(50) PRIMARY KEY, password VARCHAR(100) NOT NULL, role VARCHAR(20) NOT NULL, name VARCHAR(100) NOT NULL)")
         cursor.execute("CREATE TABLE IF NOT EXISTS feedback (id INT AUTO_INCREMENT PRIMARY KEY, teacher_id VARCHAR(50) NOT NULL, teacher_name VARCHAR(100) NOT NULL, student_name VARCHAR(100) NOT NULL, performance VARCHAR(20) NOT NULL, stars INT NOT NULL, review TEXT)")
         cursor.execute("SELECT COUNT(*) FROM users")
@@ -36,25 +53,32 @@ def init_db():
                 ("T106", "teach123", "Teacher", "Dr. S.Maheshwari")])
             conn.commit()
         cursor.close()
-    except Error as e: st.error(f"DB Error: {e}")
+    except Error as e: 
+        st.error(f"Database Initialization Error: {e}")
 
-if "db_initialized" not in st.session_state: init_db(); st.session_state.db_initialized = True
+if "db_initialized" not in st.session_state: 
+    init_db() 
+    st.session_state.db_initialized = True
 
 @st.cache_data(ttl=30)
 def get_top_teacher():
     try:
-        df = pd.read_sql("SELECT teacher_name, AVG(stars) as avg_stars FROM feedback GROUP BY teacher_id, teacher_name ORDER BY avg_stars DESC", get_active_conn())
+        conn = get_active_conn()
+        if not conn: return "N/A", 0.0
+        df = pd.read_sql("SELECT teacher_name, AVG(stars) as avg_stars FROM feedback GROUP BY teacher_id, teacher_name ORDER BY avg_stars DESC", conn)
         if df.empty: return "N/A", 0.0
         max_r = df["avg_stars"].max()
         return ", ".join(df[df["avg_stars"] == max_r]["teacher_name"].tolist()), round(max_r, 2)
-    except: return "N/A", 0.0
+    except: 
+        return "N/A", 0.0
 
 st.title("🎓 Teacher Performance Feedback Portal")
 top_name, top_rating = get_top_teacher()
 st.info(f"🏆 **Top Ranked Teacher:** {top_name} | ⭐ **Avg Rating:** {top_rating}/5")
 st.markdown("---")
 
-if "logged_in_user" not in st.session_state: st.session_state.logged_in_user = None
+if "logged_in_user" not in st.session_state: 
+    st.session_state.logged_in_user = None
 
 if st.session_state.logged_in_user is None:
     with st.form("login_form"):
@@ -63,21 +87,34 @@ if st.session_state.logged_in_user is None:
         with col2: password = st.text_input("Password", type="password")
         if st.form_submit_button("Login securely to System", use_container_width=True):
             try:
-                cursor = get_active_conn().cursor(dictionary=True)
-                cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
-                user_record = cursor.fetchone(); cursor.close()
-                if user_record: st.session_state.logged_in_user = user_record; st.rerun()
-                else: st.error("Invalid Credentials.")
-            except Error as e: st.error(f"Login Error: {e}")
+                conn = get_active_conn()
+                if not conn:
+                    st.error("Database connection failed. Please check your secrets configuration.")
+                else:
+                    cursor = conn.cursor(dictionary=True)
+                    cursor.execute("SELECT * FROM users WHERE username = %s AND password = %s", (username, password))
+                    user_record = cursor.fetchone()
+                    cursor.close()
+                    if user_record: 
+                        st.session_state.logged_in_user = user_record
+                        st.rerun()
+                    else: 
+                        st.error("Invalid Credentials.")
+            except Error as e: 
+                st.error(f"Login Error: {e}")
 else:
     user_info = st.session_state.logged_in_user
     st.sidebar.markdown(f"### Welcome, **{user_info['name']}**\n**Role:** `{user_info['role']}`")
-    if st.sidebar.button("Logout", use_container_width=True): st.session_state.logged_in_user = None; st.rerun()
+    if st.sidebar.button("Logout", use_container_width=True): 
+        st.session_state.logged_in_user = None
+        st.rerun()
 
     if user_info["role"] == "Admin":
         st.header("🛠️ Admin Console")
-        try: df_all = pd.read_sql("SELECT * FROM feedback", get_active_conn())
-        except: df_all = pd.DataFrame()
+        try: 
+            df_all = pd.read_sql("SELECT * FROM feedback", get_active_conn())
+        except: 
+            df_all = pd.DataFrame()
         
         if not df_all.empty:
             ranking = df_all.groupby("teacher_id").agg(
@@ -143,9 +180,11 @@ else:
                 if st.form_submit_button("Save User"):
                     if uid and name and pwd:
                         try:
-                            conn = get_active_conn(); cur = conn.cursor()
+                            conn = get_active_conn()
+                            cur = conn.cursor()
                             cur.execute("INSERT INTO users VALUES (%s, %s, %s, %s)", (uid, pwd, role, name))
-                            conn.commit(); cur.close()
+                            conn.commit()
+                            cur.close()
                             st.success("User added successfully!")
                             st.rerun()
                         except Error as e: st.error(f"Error: {e}")
@@ -163,9 +202,11 @@ else:
                 if st.form_submit_button("Delete User"):
                     if del_uid and del_uid != "":
                         try:
-                            conn = get_active_conn(); cur = conn.cursor()
+                            conn = get_active_conn()
+                            cur = conn.cursor()
                             cur.execute("DELETE FROM users WHERE username = %s", (del_uid,))
-                            conn.commit(); cur.close()
+                            conn.commit()
+                            cur.close()
                             st.success(f"User {del_uid} deleted successfully!")
                             st.rerun()
                         except Error as e: st.error(f"Error: {e}")
@@ -187,18 +228,18 @@ else:
     elif user_info["role"] == "Student":
         st.header("📝 Submit Teacher Feedback")
         try:
-            cursor = get_active_conn().cursor(dictionary=True)
+            conn = get_active_conn()
+            cursor = conn.cursor(dictionary=True)
             cursor.execute("SELECT username, name FROM users WHERE role = 'Teacher'")
-            teachers = {row["username"]: row["name"] for row in cursor.fetchall()}; cursor.close()
-        except: teachers = {}
+            teachers = {row["username"]: row["name"] for row in cursor.fetchall()}
+            cursor.close()
+        except: 
+            teachers = {}
 
         if teachers:
             with st.form("feedback_form", clear_on_submit=True):
                 tid = st.selectbox("Select Faculty Member", list(teachers.keys()), format_func=lambda x: f"{teachers[x]} ({x})")
-                
-                # Star rating selector matching target layout
                 stars = st.slider("Rating (Stars)", min_value=1, max_value=5, value=5)
-                
                 rev = st.text_area("Paragraph Review / Detailed Comments", placeholder="Provide constructonal feedback here regarding lessons...")
                 
                 if st.form_submit_button("Submit Structured Feedback"):
@@ -209,12 +250,14 @@ else:
                     else:
                         perf = "Low"
                         
-                    conn = get_active_conn(); cur = conn.cursor()
+                    conn = get_active_conn()
+                    cur = conn.cursor()
                     cur.execute(
                         "INSERT INTO feedback (teacher_id, teacher_name, student_name, performance, stars, review) VALUES (%s, %s, %s, %s, %s, %s)",
                         (tid, teachers[tid], user_info["name"], perf, stars, rev)
                     )
-                    conn.commit(); cur.close()
+                    conn.commit()
+                    cur.close()
                     st.success("Feedback submitted successfully!")
                     st.rerun()
 
@@ -241,8 +284,10 @@ else:
 
     elif user_info["role"] == "Teacher":
         st.header(f"📊 Performance Insights: {user_info['name']}")
-        try: df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", get_active_conn(), params=(user_info["name"],))
-        except: df_teacher = pd.DataFrame()
+        try: 
+            df_teacher = pd.read_sql("SELECT * FROM feedback WHERE teacher_name = %s", get_active_conn(), params=(user_info["name"],))
+        except: 
+            df_teacher = pd.DataFrame()
 
         if not df_teacher.empty:
             st.metric("Overall Average Rating", f"{round(df_teacher['stars'].mean(), 2)} / 5.0")
