@@ -19,7 +19,6 @@ def get_active_conn():
             conn.ping(reconnect=True, attempts=3, delay=1)
         return conn
     except Exception:
-        # Fallback to fresh connection if cached handle is completely dead
         st.cache_resource.clear()
         return mysql.connector.connect(**DB_CONFIG)
 
@@ -186,9 +185,7 @@ else:
         except Exception as e: st.error(f"Could not load directory: {e}")
 
     elif user_info["role"] == "Student":
-        st.header("📝 Submit Comprehensive Teacher Feedback")
-        st.markdown("Please evaluate your teachers across key academic parameters. Submissions are categorized into **Good**, **Moderate**, or **Low** performance.")
-        
+        st.header("📝 Submit Teacher Feedback")
         try:
             cursor = get_active_conn().cursor(dictionary=True)
             cursor.execute("SELECT username, name FROM users WHERE role = 'Teacher'")
@@ -199,23 +196,15 @@ else:
             with st.form("feedback_form", clear_on_submit=True):
                 tid = st.selectbox("Select Faculty Member", list(teachers.keys()), format_func=lambda x: f"{teachers[x]} ({x})")
                 
-                st.markdown("#### Performance Metrics (5 = Excellent, 1 = Poor)")
-                mc1, mc2 = st.columns(2)
-                with mc1: 
-                    ml = st.selectbox("Lecturing Quality", [5,4,3,2,1], index=0)
-                    md = st.selectbox("Classroom Discipline", [5,4,3,2,1], index=0)
-                    mp = st.selectbox("Portion Coverage", [5,4,3,2,1], index=0)
-                with mc2: 
-                    mi = st.selectbox("Overall Impression", [5,4,3,2,1], index=0)
-                    mc = st.selectbox("Student Communication", [5,4,3,2,1], index=0)
+                # Star rating selector matching target layout
+                stars = st.slider("Rating (Stars)", min_value=1, max_value=5, value=5)
                 
-                rev = st.text_area("Additional Comments / Suggestions")
+                rev = st.text_area("Paragraph Review / Detailed Comments", placeholder="Provide constructonal feedback here regarding lessons...")
                 
-                if st.form_submit_button("Submit Evaluative Feedback", use_container_width=True):
-                    avg = (ml + md + mp + mi + mc) / 5
-                    if avg >= 4.0:
+                if st.form_submit_button("Submit Structured Feedback"):
+                    if stars >= 4:
                         perf = "Good"
-                    elif avg >= 2.5:
+                    elif stars >= 3:
                         perf = "Moderate"
                     else:
                         perf = "Low"
@@ -223,11 +212,32 @@ else:
                     conn = get_active_conn(); cur = conn.cursor()
                     cur.execute(
                         "INSERT INTO feedback (teacher_id, teacher_name, student_name, performance, stars, review) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (tid, teachers[tid], user_info["name"], perf, round(avg), f"[Lecturing:{ml}, Discipline:{md}, Portion:{mp}, Impression:{mi}, Communication:{mc}] Review: {rev}")
+                        (tid, teachers[tid], user_info["name"], perf, stars, rev)
                     )
                     conn.commit(); cur.close()
-                    st.success(f"Feedback submitted successfully! Classified as: **{perf}** (Average Rating: {round(avg, 2)} ⭐)")
+                    st.success("Feedback submitted successfully!")
                     st.rerun()
+
+        st.markdown("---")
+        st.subheader("📊 Your Feedback History")
+        try:
+            df_my_feedback = pd.read_sql(
+                "SELECT teacher_id as `Teacher ID`, teacher_name as `Teacher Name`, performance as `Classification`, stars as `Stars Given`, review as `Your Logged Review Metrics` FROM feedback WHERE student_name = %s",
+                get_active_conn(), params=(user_info["name"],)
+            )
+            if not df_my_feedback.empty:
+                st.dataframe(df_my_feedback, use_container_width=True, hide_index=True)
+                csv_data = df_my_feedback.to_csv(index=False).encode('utf-8')
+                st.download_button(
+                    label="📥 Download My Submission History (CSV)",
+                    data=csv_data,
+                    file_name="my_submission_history.csv",
+                    mime="text/csv"
+                )
+            else:
+                st.info("You haven't submitted any feedback yet.")
+        except Exception as e:
+            st.error(f"Could not load your history: {e}")
 
     elif user_info["role"] == "Teacher":
         st.header(f"📊 Performance Insights: {user_info['name']}")
