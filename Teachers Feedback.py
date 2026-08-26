@@ -239,22 +239,34 @@ else:
         if teachers:
             with st.form("feedback_form", clear_on_submit=True):
                 tid = st.selectbox("Select Faculty Member", list(teachers.keys()), format_func=lambda x: f"{teachers[x]} ({x})")
-                stars = st.slider("Rating (Stars)", min_value=1, max_value=5, value=5)
-                rev = st.text_area("Paragraph Review / Detailed Comments", placeholder="Provide constructonal feedback here regarding lessons...")
                 
-                if st.form_submit_button("Submit Structured Feedback"):
-                    if stars >= 4:
+                mc1, mc2 = st.columns(2)
+                with mc1: 
+                    ml = st.selectbox("Lecturing", [5, 4, 3, 2, 1], index=0)
+                    md = st.selectbox("Discipline", [5, 4, 3, 2, 1], index=0)
+                    mp = st.selectbox("Portion", [5, 4, 3, 2, 1], index=0)
+                with mc2: 
+                    mi = st.selectbox("Impression", [5, 4, 3, 2, 1], index=0)
+                    mc = st.selectbox("Communication", [5, 4, 3, 2, 1], index=0)
+                
+                rev = st.text_area("Comments")
+                
+                if st.form_submit_button("Submit"):
+                    avg = (ml + md + mp + mi + mc) / 5
+                    if avg >= 4:
                         perf = "Good"
-                    elif stars >= 3:
+                    elif avg >= 3:
                         perf = "Moderate"
                     else:
                         perf = "Low"
                         
+                    detailed_review_text = f"[Lecturing: {ml}/5, Discipline: {md}/5, Portion: {mp}/5, Impression: {mi}/5, Communication: {mc}/5] {rev}"
+                    
                     conn = get_active_conn()
                     cur = conn.cursor()
                     cur.execute(
                         "INSERT INTO feedback (teacher_id, teacher_name, student_name, performance, stars, review) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (tid, teachers[tid], user_info["name"], perf, stars, rev)
+                        (tid, teachers[tid], user_info["name"], perf, round(avg), detailed_review_text)
                     )
                     conn.commit()
                     cur.close()
