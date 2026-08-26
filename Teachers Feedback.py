@@ -243,22 +243,32 @@ else:
             with st.form("feedback_form", clear_on_submit=True):
                 tid = st.selectbox("Select Faculty Member", list(teachers.keys()), format_func=lambda x: f"{teachers[x]} ({x})")
                 
+                st.markdown("### 📊 Performance Assessment Matrix")
+                st.markdown("Please evaluate your instructor honestly across the following indicators:")
+                
                 mc1, mc2 = st.columns(2)
                 with mc1: 
-                    ml = st.selectbox("Lecturing", [5, 4, 3, 2, 1], index=0)
-                    md = st.selectbox("Discipline", [5, 4, 3, 2, 1], index=0)
-                    mp = st.selectbox("Portion", [5, 4, 3, 2, 1], index=0)
+                    ml = st.selectbox("Lecturing Quality & Explanation", [5, 4, 3, 2, 1], index=0)
+                    md = st.selectbox("Maintaining Discipline & Classroom Control", [5, 4, 3, 2, 1], index=0)
+                    mp = st.selectbox("Completing Portion & Syllabus Schedule", [5, 4, 3, 2, 1], index=0)
                 with mc2: 
-                    mi = st.selectbox("Impression", [5, 4, 3, 2, 1], index=0)
-                    mc = st.selectbox("Communication", [5, 4, 3, 2, 1], index=0)
+                    mi = st.selectbox("General Impression Between Students", [5, 4, 3, 2, 1], index=0)
+                    mc = st.selectbox("Communication Skills & Approachability", [5, 4, 3, 2, 1], index=0)
                 
-                rev = st.text_area("Comments")
+                st.markdown("---")
+                st.markdown("**Overall Score Star Selection (Optional override link):**")
+                override_star = st.select_slider("", options=[1, 2, 3, 4, 5], value=5, format_func=lambda x: "⭐" * x)
+                
+                st.markdown("**Paragraph Review / Detailed Comments**")
+                rev = st.text_area("Provide instructional feedback here regarding lessons...")
                 
                 if st.form_submit_button("Submit"):
-                    avg = (ml + md + mp + mi + mc) / 5
-                    if avg >= 4:
+                    calc_avg = (ml + md + mp + mi + mc) / 5
+                    final_stars = override_star if override_star != 5 else round(calc_avg)
+                    
+                    if final_stars >= 4:
                         perf = "Good"
-                    elif avg >= 3:
+                    elif final_stars >= 3:
                         perf = "Moderate"
                     else:
                         perf = "Low"
@@ -269,7 +279,7 @@ else:
                     cur = conn.cursor()
                     cur.execute(
                         "INSERT INTO feedback (teacher_id, teacher_name, student_name, performance, stars, review) VALUES (%s, %s, %s, %s, %s, %s)",
-                        (tid, teachers[tid], user_info["name"], perf, round(avg), detailed_review_text)
+                        (tid, teachers[tid], user_info["name"], perf, final_stars, detailed_review_text)
                     )
                     conn.commit()
                     cur.close()
