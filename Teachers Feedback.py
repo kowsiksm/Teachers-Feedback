@@ -3,7 +3,6 @@ from mysql.connector import Error
 
 st.set_page_config(page_title="Teacher Feedback Portal", layout="wide")
 
-
 try:
     DB_CONFIG = {
         "host": st.secrets["mysql"]["host"], 
@@ -285,6 +284,9 @@ else:
                 get_active_conn(), params=(user_info["name"],)
             )
             if not df_my_feedback.empty:
+                overall_avg_student = round(df_my_feedback['Stars Given'].mean(), 2)
+                st.metric("⭐ Your Average Given Rating", f"{overall_avg_student} / 5.0")
+                
                 st.dataframe(df_my_feedback, use_container_width=True, hide_index=True)
                 csv_data = df_my_feedback.to_csv(index=False).encode('utf-8')
                 st.download_button(
